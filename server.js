@@ -1,25 +1,41 @@
-import { createServer } from 'http';
-import { Server } from 'socket.io';
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const cors = require("cors");
 
-const httpServer = createServer();
-const io = new Server(httpServer, {
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: "*",
+    methods: ["GET", "POST"]
   }
 });
 
-io.on('connection', (socket) => {
-  console.log('Verbunden:', socket.id);
+const clients = {};
 
-  socket.on('send', ({ to, type, data }) => {
-    io.to(to).emit(type, { ...data, sender: socket.id });
+io.on("connection", (socket) => {
+  socket.on("join", ({ partner }) => {
+    socket.partner = partner;
+    clients[partner] = socket;
+
+    console.log(`Partner ${partner} connected`);
   });
 
-  socket.on('disconnect', () => {
-    console.log('Getrennt:', socket.id);
+  socket.on("message", ({ to, type, data }) => {
+    if (clients[to]) {
+      clients[to].emit("message", { type, data, sender: socket.partner });
+    }
+  });
+
+  socket.on("disconnect", () => {
+    if (socket.partner) {
+      delete clients[socket.partner];
+    }
   });
 });
 
-httpServer.listen(process.env.PORT || 3000, () => {
-  console.log('Server läuft auf Port', process.env.PORT || 3000);
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server läuft auf Port ${PORT}`);
 });
