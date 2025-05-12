@@ -1,8 +1,8 @@
-import express from 'express';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
-import path from 'path';
-import { fileURLToPath } from 'url';
+const express = require('express');
+const { createServer } = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
+const { fileURLToPath } = require('url');
 
 // Für __dirname (weil ES Module):
 const __filename = fileURLToPath(import.meta.url);
