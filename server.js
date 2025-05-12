@@ -1,41 +1,36 @@
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-const cors = require("cors");
+import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Für __dirname (weil ES Module):
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: { origin: '*' }
 });
 
-const clients = {};
+// Statische Dateien aus "public" bereitstellen:
+app.use(express.static(path.join(__dirname, 'public')));
 
-io.on("connection", (socket) => {
-  socket.on("join", ({ partner }) => {
-    socket.partner = partner;
-    clients[partner] = socket;
+io.on('connection', socket => {
+  console.log('Client verbunden:', socket.id);
 
-    console.log(`Partner ${partner} connected`);
+  socket.on('send-message', ({ to, type, data }) => {
+    io.to(to).emit(type, { ...data, sender: socket.id });
   });
 
-  socket.on("message", ({ to, type, data }) => {
-    if (clients[to]) {
-      clients[to].emit("message", { type, data, sender: socket.partner });
-    }
-  });
-
-  socket.on("disconnect", () => {
-    if (socket.partner) {
-      delete clients[socket.partner];
-    }
+  socket.on('disconnect', () => {
+    console.log('Client getrennt:', socket.id);
   });
 });
 
+// ❗ Wichtig: Render verlangt genau das hier:
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`Server läuft auf Port ${PORT}`);
 });
