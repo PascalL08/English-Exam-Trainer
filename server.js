@@ -5,58 +5,56 @@ const path = require('path');
 
 const app = express();
 const httpServer = createServer(app);
-const io = new Server(httpServer, { cors: { origin: '*' } });
-
-const partners = {};     // { p1: socket.id, p2: socket.id }
-const readyStatus = {};  // { p1: false, p2: false }
+const io = new Server(httpServer, {
+  cors: { origin: '*' }
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+const partners = {}; // socketId => 'p1' oder 'p2'
+const readyStatus = { p1: false, p2: false };
 
 io.on('connection', socket => {
   console.log('Client verbunden:', socket.id);
 
   socket.on('join', ({ partner }) => {
-    partners[partner] = socket.id;
-    readyStatus[partner] = false;
-    console.log(`Partner ${partner} hat sich verbunden`);
+    partners[socket.id] = partner;
   });
 
   socket.on('send-message', ({ to, type, data }) => {
-    const targetId = partners[to];
-    if (targetId) {
-      io.to(targetId).emit('message', { type, data, sender: getPartnerKey(socket.id) });
+    // Nachricht an bestimmten Partner weiterleiten
+    const targetSocketId = Object.entries(partners).find(([, p]) => p === to)?.[0];
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('message', { type, data, sender: partners[socket.id] });
     }
   });
 
-  socket.on('ready', () => {
-    const partner = getPartnerKey(socket.id);
+  socket.on('partner-ready', () => {
+    const partner = partners[socket.id];
     if (!partner) return;
+
     readyStatus[partner] = true;
-    console.log(`${partner} ist bereit`);
+    console.log('Bereit:', readyStatus);
 
     if (readyStatus.p1 && readyStatus.p2) {
-      // Beide sind bereit – sende an beide das Startsignal
-      io.to(partners.p1).emit('message', { type: 'start-dialogue', data: {} });
-      io.to(partners.p2).emit('message', { type: 'start-dialogue', data: {} });
-
-      // Reset für den nächsten Durchlauf (optional)
+      // Zurücksetzen für nächste Runde
       readyStatus.p1 = false;
       readyStatus.p2 = false;
+
+      // An beide Partner senden
+      Object.entries(partners).forEach(([sockId]) => {
+        io.to(sockId).emit('message', { type: 'start-dialogue', data: {} });
+      });
     }
   });
 
   socket.on('disconnect', () => {
-    const partner = getPartnerKey(socket.id);
-    if (partner) {
-      delete partners[partner];
-      delete readyStatus[partner];
-      console.log(`${partner} hat die Verbindung getrennt`);
-    }
+    const partner = partners[socket.id];
+    console.log('Client getrennt:', socket.id, partner);
+    delete partners[socket.id];
+    readyStatus.p1 = false;
+    readyStatus.p2 = false;
   });
-
-  function getPartnerKey(socketId) {
-    return Object.keys(partners).find(key => partners[key] === socketId);
-  }
 });
 
 const PORT = process.env.PORT || 3000;
